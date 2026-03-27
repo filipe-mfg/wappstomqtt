@@ -1,0 +1,118 @@
+{
+  "_comment": "ThingsBoard ↔ Wappsto bridge – example configuration",
+
+  "log_level": "info",
+
+  "thingsboard": {
+    "host": "thingsboard.example.com",
+    "port": 1883,
+    "username": "GATEWAY_ACCESS_TOKEN",
+    "password": "",
+    "client_id": "tb-wappsto-bridge",
+    "keepalive_sec": 60,
+
+    "_comment_topics": "Standard ThingsBoard gateway topics. Override if you use custom topics.",
+    "subscribe_topics": ["v1/gateway/#"],
+    "telemetry_topic":   "v1/gateway/telemetry",
+    "attributes_topic":  "v1/gateway/attributes",
+    "connect_topic":     "v1/gateway/connect",
+    "disconnect_topic":  "v1/gateway/disconnect",
+    "rpc_topic":         "v1/gateway/rpc",
+    "rpc_resp_topic":    "v1/gateway/rpc",
+
+    "tls": {
+      "enabled": false,
+      "ca_cert": "",
+      "client_cert": "",
+      "client_key": ""
+    }
+  },
+
+  "wappsto": {
+    "host": "wappsto.com",
+    "port": 443,
+    "_comment_certs": "Download certificates from IoT Certificate Manager on wappsto.com",
+    "ca_cert":     "certs/ca.crt",
+    "client_cert": "certs/client.crt",
+    "client_key":  "certs/client.key",
+    "_comment_uuid": "Set to 'auto' to read network UUID from client certificate CN",
+    "network_uuid": "auto",
+    "rpc_timeout_sec": 5,
+    "ping_interval_sec": 30
+  },
+
+  "mapping": {
+    "_comment_mode": "Use 'dynamic' to auto-discover devices, 'static' for explicit mapping",
+    "mode": "dynamic",
+
+    "_comment_dynamic": "Dynamic mode options",
+    "auto_create_values": true,
+    "default_min":  -1e9,
+    "default_max":   1e9,
+    "default_step":  1.0,
+    "default_permission": "r",
+
+    "_comment_static": "Static device/value mappings (used in static mode, or to override specific devices in dynamic mode)",
+    "devices": [
+      {
+        "tb_device":           "TemperatureSensor01",
+        "wappsto_device_name": "Temperature Sensor 01",
+        "wappsto_device_uuid": "",
+        "values": [
+          {
+            "tb_key":             "temperature",
+            "wappsto_value_name": "Temperature",
+            "wappsto_value_uuid": "",
+            "type":       "number",
+            "min":        -50,
+            "max":        150,
+            "step":       0.1,
+            "unit":       "°C",
+            "permission": "r"
+          },
+          {
+            "tb_key":             "humidity",
+            "wappsto_value_name": "Humidity",
+            "wappsto_value_uuid": "",
+            "type":   "number",
+            "min":    0,
+            "max":    100,
+            "step":   1,
+            "unit":   "%",
+            "permission": "r"
+          }
+        ]
+      },
+      {
+        "tb_device":           "SmartActuator01",
+        "wappsto_device_name": "Smart Actuator 01",
+        "wappsto_device_uuid": "",
+        "values": [
+          {
+            "tb_key":             "status",
+            "wappsto_value_name": "Status",
+            "type":       "number",
+            "min":        0,
+            "max":        1,
+            "step":       1,
+            "unit":       "",
+            "permission": "r"
+          },
+          {
+            "tb_key":             "setpoint",
+            "wappsto_value_name": "Setpoint",
+            "type":       "number",
+            "min":        0,
+            "max":        100,
+            "step":       1,
+            "unit":       "%",
+            "permission": "rw",
+            "_comment":   "When Wappsto control changes, call this RPC on the TB device",
+            "rpc_method": "setSetpoint",
+            "rpc_params_template": "{\"value\": {{value}}}"
+          }
+        ]
+      }
+    ]
+  }
+}

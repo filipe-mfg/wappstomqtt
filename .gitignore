@@ -1,0 +1,33 @@
+# Build artifacts
+build/
+cmake-build-*/
+*.o
+*.a
+*.so
+tb_wappsto_bridge
+
+# CMake generated
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+_deps/
+
+# Certificates (never commit private keys)
+certs/
+*.crt
+*.key
+*.pem
+
+# Config with real credentials
+config.json
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Logs
+*.log
