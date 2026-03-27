@@ -25,6 +25,18 @@
       "ca_cert": "",
       "client_cert": "",
       "client_key": ""
+    },
+
+    "_comment_api": "REST API credentials for Wappsto→ThingsBoard RPC (control direction). The Gateway MQTT API does not support external RPC triggering, so we use the HTTP API instead.",
+    "api": {
+      "enabled": false,
+      "host": "",
+      "_comment_host": "Leave empty to use same host as MQTT. Override if API is on a different host/port.",
+      "port": 8080,
+      "tls": false,
+      "username": "admin@example.com",
+      "password": "admin_password",
+      "timeout_sec": 10
     }
   },
 

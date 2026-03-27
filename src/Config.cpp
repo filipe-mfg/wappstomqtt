@@ -43,6 +43,20 @@ static ThingsBoardConfig parseThingsBoard(const json& j) {
     c.rpc_resp_topic   = jget<std::string>(j, "rpc_resp_topic",   c.rpc_resp_topic);
 
     if (j.contains("tls")) c.tls = parseTbTls(j["tls"]);
+
+    if (j.contains("api")) {
+        auto& a = j["api"];
+        c.api.enabled  = jget<bool>(a,        "enabled",  false);
+        c.api.host     = jget<std::string>(a, "host",     "");
+        c.api.port     = jget<int>(a,         "port",     8080);
+        c.api.tls      = jget<bool>(a,        "tls",      false);
+        c.api.username = jget<std::string>(a, "username", "");
+        c.api.password = jget<std::string>(a, "password", "");
+        c.api.timeout_sec = jget<int>(a,      "timeout_sec", 10);
+    }
+    // Default: use same host as MQTT broker
+    if (c.api.host.empty()) c.api.host = c.host;
+
     return c;
 }
 

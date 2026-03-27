@@ -19,6 +19,9 @@ Bridge::Bridge(const Config& cfg)
     , m_tb(std::make_unique<ThingsBoardClient>(cfg.thingsboard))
     , m_wappsto(std::make_unique<WappstoClient>(cfg.wappsto))
 {
+    if (cfg.thingsboard.api.enabled) {
+        m_tbApi = std::make_unique<ThingsBoardApi>(cfg.thingsboard.api);
+    }
 }
 
 // -----------------------------------------------------------
@@ -94,6 +97,12 @@ bool Bridge::start() {
                 }
             }
         }
+    }
+
+    // Authenticate with ThingsBoard REST API (for Wappsto→TB RPC)
+    if (m_tbApi) {
+        Logger::info("[Bridge] Authenticating with ThingsBoard REST API…");
+        m_tbApi->authenticate();
     }
 
     Logger::info("[Bridge] Starting ThingsBoard client…");
@@ -253,29 +262,26 @@ void Bridge::onWappstoControl(const WappstoControl& ctrl) {
 }
 
 // -----------------------------------------------------------
-// ThingsBoard RPC publish
+// ThingsBoard RPC trigger (Wappsto → ThingsBoard)
 //
-// TB Gateway RPC topic: v1/gateway/rpc
-// Payload: { "device": "Name", "data": { "id": N, "method": "m", "params": {} } }
+// ThingsBoard Gateway MQTT API does NOT allow external clients
+// to push RPC commands via MQTT. The correct mechanism is to
+// call the ThingsBoard REST API:
+//   POST /api/rpc/oneway/{deviceId}
+//
+// If thingsboard.api.enabled = true, we call the REST API.
+// Otherwise the RPC is logged but not sent.
 // -----------------------------------------------------------
 void Bridge::sendTbRpc(const std::string& tbDevice,
                        const std::string& method,
                        const std::string& paramsJson) {
-    static int rpcId = 1;
-
-    json paramsJ = json::parse(paramsJson, nullptr, false);
-    if (paramsJ.is_discarded()) paramsJ = json::object();
-
-    json payload = {
-        {"device", tbDevice},
-        {"data",   {
-            {"id",     rpcId++},
-            {"method", method},
-            {"params", paramsJ}
-        }}
-    };
-
-    m_tb->publish(m_cfg.thingsboard.rpc_resp_topic, payload.dump());
+    if (m_tbApi) {
+        m_tbApi->sendRpc(tbDevice, method, paramsJson);
+    } else {
+        Logger::warn("[Bridge] RPC to '%s' method='%s' skipped – "
+                     "enable thingsboard.api in config to send RPCs",
+                     tbDevice.c_str(), method.c_str());
+    }
 }
 
 // -----------------------------------------------------------

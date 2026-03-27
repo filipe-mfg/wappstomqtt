@@ -5,6 +5,19 @@
 #include <optional>
 
 // -----------------------------------------------------------
+// ThingsBoard REST API configuration (used for RPC triggering)
+// -----------------------------------------------------------
+struct ThingsBoardApiConfig {
+    bool        enabled  = false;
+    std::string host;        // defaults to thingsboard.host
+    int         port     = 8080;
+    bool        tls      = false;
+    std::string username;    // ThingsBoard user email
+    std::string password;
+    int         timeout_sec = 10;
+};
+
+// -----------------------------------------------------------
 // ThingsBoard MQTT configuration
 // -----------------------------------------------------------
 struct TbTlsConfig {
@@ -31,7 +44,8 @@ struct ThingsBoardConfig {
     std::string rpc_topic         = "v1/gateway/rpc";         // incoming RPC from TB
     std::string rpc_resp_topic    = "v1/gateway/rpc";         // RPC response (same topic)
 
-    TbTlsConfig tls;
+    TbTlsConfig        tls;
+    ThingsBoardApiConfig api;
 };
 
 // -----------------------------------------------------------

@@ -3,6 +3,7 @@
 #include "Config.hpp"
 #include "ThingsBoardClient.hpp"
 #include "WappstoClient.hpp"
+#include "ThingsBoardApi.hpp"
 #include <string>
 #include <map>
 #include <mutex>
@@ -60,6 +61,7 @@ private:
     Config m_cfg;
     std::unique_ptr<ThingsBoardClient> m_tb;
     std::unique_ptr<WappstoClient>     m_wappsto;
+    std::unique_ptr<ThingsBoardApi>    m_tbApi;   // for RPC triggering (Wappsto→TB)
 
     std::mutex m_devicesMutex;
     // keyed by ThingsBoard device name

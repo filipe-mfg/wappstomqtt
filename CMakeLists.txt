@@ -46,6 +46,7 @@ set(SOURCES
     src/Config.cpp
     src/ThingsBoardClient.cpp
     src/WappstoClient.cpp
+    src/ThingsBoardApi.cpp
     src/Bridge.cpp
 )
 
