@@ -417,12 +417,10 @@ bool WappstoClient::provisionNetwork(const std::string& name) {
         {"name", m_net.name}
     };
 
+    // The network already exists when the certificate is registered; PUT
+    // updates it in place. POST to /network is not allowed on this endpoint.
     std::string url = "/network/" + m_net.uuid;
-    std::string res = sendRpc("POST", url, netData.dump());
-    if (res.empty()) {
-        // Try PUT (update) if POST failed (network already exists)
-        res = sendRpc("PUT", url, netData.dump());
-    }
+    std::string res = sendRpc("PUT", url, netData.dump());
     return !res.empty();
 }
 
@@ -449,9 +447,13 @@ std::string WappstoClient::ensureDevice(const std::string& name,
         {"communication", "mqtt"}
     };
 
-    std::string url = "/network/" + m_net.uuid + "/device/" + dev.uuid;
-    std::string res = sendRpc("POST", url, devData.dump());
-    if (res.empty()) res = sendRpc("PUT", url, devData.dump());
+    // Wappsto expects creations to POST to the COLLECTION URL; the UUID is
+    // taken from meta.id in the body. Use PUT on the specific URL to update
+    // (or create) a resource that already has that UUID assigned.
+    std::string colUrl  = "/network/" + m_net.uuid + "/device";
+    std::string itemUrl = colUrl + "/" + dev.uuid;
+    std::string res = sendRpc("POST", colUrl, devData.dump());
+    if (res.empty()) res = sendRpc("PUT", itemUrl, devData.dump());
 
     if (!res.empty()) {
         m_net.devices[name] = dev;
@@ -499,15 +501,17 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
         {v.type,      schema}
     };
 
-    std::string url = "/network/" + m_net.uuid + "/device/" + deviceUuid +
-                      "/value/" + v.uuid;
-    std::string res = sendRpc("POST", url, valData.dump());
-    if (res.empty()) res = sendRpc("PUT", url, valData.dump());
+    std::string valColUrl  = "/network/" + m_net.uuid + "/device/" + deviceUuid + "/value";
+    std::string valItemUrl = valColUrl + "/" + v.uuid;
+    std::string res = sendRpc("POST", valColUrl, valData.dump());
+    if (res.empty()) res = sendRpc("PUT", valItemUrl, valData.dump());
 
     if (res.empty()) {
         Logger::error("[Wappsto] Failed to provision value: %s", v.name.c_str());
         return "";
     }
+
+    std::string stateColUrl = valItemUrl + "/state";
 
     // Create Report state (if readable)
     if (v.permission == "r" || v.permission == "rw") {
@@ -520,8 +524,9 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
             {"data",      "NA"},
             {"timestamp", nowISO8601()}
         };
-        std::string surl = url + "/state/" + v.report_state_uuid;
-        sendRpc("POST", surl, stData.dump());
+        std::string sItemUrl = stateColUrl + "/" + v.report_state_uuid;
+        std::string sres = sendRpc("POST", stateColUrl, stData.dump());
+        if (sres.empty()) sendRpc("PUT", sItemUrl, stData.dump());
     }
 
     // Create Control state (if writable)
@@ -535,8 +540,9 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
             {"data",      "NA"},
             {"timestamp", nowISO8601()}
         };
-        std::string surl = url + "/state/" + v.control_state_uuid;
-        sendRpc("POST", surl, stData.dump());
+        std::string sItemUrl = stateColUrl + "/" + v.control_state_uuid;
+        std::string sres = sendRpc("POST", stateColUrl, stData.dump());
+        if (sres.empty()) sendRpc("PUT", sItemUrl, stData.dump());
     }
 
     dev->values[v.name] = v;
