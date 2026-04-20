@@ -417,10 +417,14 @@ bool WappstoClient::provisionNetwork(const std::string& name) {
         {"name", m_net.name}
     };
 
-    // The network already exists when the certificate is registered; PUT
-    // updates it in place. POST to /network is not allowed on this endpoint.
-    std::string url = "/network/" + m_net.uuid;
-    std::string res = sendRpc("PUT", url, netData.dump());
+    // The network may or may not exist: the certificate registration
+    // creates it, but the user can delete it from the UI. POST to the
+    // collection creates it (taking the UUID from meta.id); PUT to the
+    // specific URL updates an existing network.
+    std::string colUrl  = "/network";
+    std::string itemUrl = colUrl + "/" + m_net.uuid;
+    std::string res = sendRpc("PUT", itemUrl, netData.dump());
+    if (res.empty()) res = sendRpc("POST", colUrl, netData.dump());
     return !res.empty();
 }
 
