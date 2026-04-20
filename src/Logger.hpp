@@ -41,8 +41,11 @@ private:
         std::time_t t = std::time(nullptr);
         std::strftime(ts, sizeof(ts), "%Y-%m-%dT%H:%M:%S", std::gmtime(&t));
         std::fprintf(stderr, "[%s] [%s] ", ts, tag);
-        std::fprintf(stderr, fmt, std::forward<Args>(args)...);
-        std::fprintf(stderr, "\n");
+        if constexpr (sizeof...(args) == 0)
+            std::fputs(fmt, stderr);
+        else
+            std::fprintf(stderr, fmt, std::forward<Args>(args)...);
+        std::fputc('\n', stderr);
     }
 };
 
