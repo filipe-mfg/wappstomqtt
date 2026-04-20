@@ -66,19 +66,31 @@ bool TbGatewayServer::start() {
             }
         }
 
-        // Try to fetch the current control-state payload. If the value
-        // is brand new or empty, seed it from default_json.
-        std::string cur = m_wappsto.getStateData(entry.control_state_uuid);
-        if (cur.empty() || cur == "NA") {
-            Logger::info("[TbSrv] Seeding %s with default config",
+        // Load initial cache value with clear priority:
+        //   1. Control state — user-set desired config (never overwritten by bridge)
+        //   2. Report state  — last known running config (written by handleAttrBroadcast)
+        //   3. default_json  — only when BOTH are "NA" (truly first time ever)
+        //
+        // This ensures bridge restarts never clobber configs the user or gateway set.
+        std::string ctrlData = m_wappsto.getStateData(entry.control_state_uuid);
+        std::string rptData  = m_wappsto.getStateData(entry.report_state_uuid);
+
+        std::string cur;
+        if (!ctrlData.empty() && ctrlData != "NA") {
+            cur = ctrlData;
+            Logger::info("[TbSrv] %s: using control-state config", e.tb_key.c_str());
+        } else if (!rptData.empty() && rptData != "NA") {
+            cur = rptData;
+            Logger::info("[TbSrv] %s: using report-state config (gateway's last known)",
                          e.tb_key.c_str());
-            // Push the default into Wappsto's control state so the
-            // value is usable from the UI right away.
+        } else {
             cur = e.default_json;
+            Logger::info("[TbSrv] %s: seeding control state with default (first run)",
+                         e.tb_key.c_str());
+            // Write default only to control state as a starting point for the user.
+            // Report state is left NA — will be set by handleAttrBroadcast.
             if (!entry.control_state_uuid.empty())
                 m_wappsto.reportValue(entry.control_state_uuid, cur);
-            if (!entry.report_state_uuid.empty())
-                m_wappsto.reportValue(entry.report_state_uuid,  cur);
         }
         entry.cached_json = cur;
 
