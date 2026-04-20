@@ -431,17 +431,25 @@ bool WappstoClient::provisionNetwork(const std::string& name) {
 
 std::string WappstoClient::ensureDevice(const std::string& name,
                                         const std::string& preferredUuid) {
-    // Check if already exists
+    // Check in-memory cache
     auto it = m_net.devices.find(name);
     if (it != m_net.devices.end()) return it->second.uuid;
 
     WappstoDevice dev;
     dev.name = name;
-    // Deterministic UUID derived from network UUID + device name so it
-    // survives restarts without re-creating duplicate objects.
-    dev.uuid = !preferredUuid.empty()
-               ? preferredUuid
-               : uuid5(m_net.uuid, name);
+    dev.uuid = !preferredUuid.empty() ? preferredUuid : uuid5(m_net.uuid, name);
+
+    std::string colUrl  = "/network/" + m_net.uuid + "/device";
+    std::string itemUrl = colUrl + "/" + dev.uuid;
+
+    // Check existence first — avoid touching a device that already exists
+    // (devices have no state data to wipe, but skipping unnecessary writes is good)
+    std::string existing = sendRpc("GET", itemUrl);
+    if (!existing.empty()) {
+        m_net.devices[name] = dev;
+        Logger::info("[Wappsto] Device exists: %s (%s)", name.c_str(), dev.uuid.c_str());
+        return dev.uuid;
+    }
 
     json devData = {
         {"meta",     {{"id",   dev.uuid},
@@ -452,11 +460,6 @@ std::string WappstoClient::ensureDevice(const std::string& name,
         {"communication", "mqtt"}
     };
 
-    // Wappsto expects creations to POST to the COLLECTION URL; the UUID is
-    // taken from meta.id in the body. Use PUT on the specific URL to update
-    // (or create) a resource that already has that UUID assigned.
-    std::string colUrl  = "/network/" + m_net.uuid + "/device";
-    std::string itemUrl = colUrl + "/" + dev.uuid;
     std::string res = sendRpc("POST", colUrl, devData.dump());
     if (res.empty()) res = sendRpc("PUT", itemUrl, devData.dump());
 
@@ -488,14 +491,33 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
     WappstoValue v = val;
     if (v.uuid.empty()) v.uuid = uuid5(deviceUuid, v.name);
 
-    // Build number/string schema
+    // Compute deterministic state UUIDs up-front — needed whether or not
+    // we create the value (existing or new).
+    if (v.permission == "r" || v.permission == "rw")
+        v.report_state_uuid  = uuid5(v.uuid, "Report");
+    if (v.permission == "w" || v.permission == "rw")
+        v.control_state_uuid = uuid5(v.uuid, "Control");
+
+    std::string valColUrl  = "/network/" + m_net.uuid + "/device/" + deviceUuid + "/value";
+    std::string valItemUrl = valColUrl + "/" + v.uuid;
+
+    // If the value already exists in Wappsto, just register it locally.
+    // Never POST/PUT states with "NA" — that would wipe data the user edited.
+    std::string existing = sendRpc("GET", valItemUrl);
+    if (!existing.empty()) {
+        dev->values[v.name] = v;
+        Logger::info("[Wappsto] Value exists: %s/%s (%s)",
+            dev->name.c_str(), v.name.c_str(), v.uuid.c_str());
+        return v.uuid;
+    }
+
+    // Value doesn't exist yet — create it (only on first run or after network reset)
     json schema;
     if (v.type == "number") {
         schema = {{"min", v.min}, {"max", v.max}, {"step", v.step}, {"unit", v.unit}};
     } else if (v.type == "blob") {
         schema = {{"max", 65536}, {"encoding", "utf-8"}};
     } else {
-        // "string" — Wappsto limits to 64 chars in the UI; use blob for larger payloads
         schema = {{"max", 64}, {"encoding", "utf-8"}};
     }
 
@@ -509,8 +531,6 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
         {v.type,      schema}
     };
 
-    std::string valColUrl  = "/network/" + m_net.uuid + "/device/" + deviceUuid + "/value";
-    std::string valItemUrl = valColUrl + "/" + v.uuid;
     std::string res = sendRpc("POST", valColUrl, valData.dump());
     if (res.empty()) res = sendRpc("PUT", valItemUrl, valData.dump());
 
@@ -522,8 +542,7 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
     std::string stateColUrl = valItemUrl + "/state";
 
     // Create Report state (if readable)
-    if (v.permission == "r" || v.permission == "rw") {
-        v.report_state_uuid = uuid5(v.uuid, "Report");
+    if (!v.report_state_uuid.empty()) {
         json stData = {
             {"meta",      {{"id",   v.report_state_uuid},
                            {"type", "state"},
@@ -538,8 +557,7 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
     }
 
     // Create Control state (if writable)
-    if (v.permission == "w" || v.permission == "rw") {
-        v.control_state_uuid = uuid5(v.uuid, "Control");
+    if (!v.control_state_uuid.empty()) {
         json stData = {
             {"meta",      {{"id",   v.control_state_uuid},
                            {"type", "state"},
