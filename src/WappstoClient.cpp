@@ -35,14 +35,16 @@ WappstoClient::WappstoClient(const WappstoConfig& cfg) : m_cfg(cfg) {
     m_ctx = SSL_CTX_new(TLS_client_method());
     if (!m_ctx) throw std::runtime_error("SSL_CTX_new failed");
 
-    // Load CA cert for server verification
+    // Always load system default CA paths — Wappsto's public endpoint uses
+    // a publicly-issued cert (Let's Encrypt / DigiCert / ...). The bundle's
+    // ca.crt is additionally loaded as a trusted root so private/staging
+    // deployments also work.
+    SSL_CTX_set_default_verify_paths(m_ctx);
     if (!m_cfg.ca_cert.empty()) {
         if (SSL_CTX_load_verify_locations(m_ctx, m_cfg.ca_cert.c_str(), nullptr) != 1)
-            throw std::runtime_error("Cannot load CA cert: " + m_cfg.ca_cert);
-        SSL_CTX_set_verify(m_ctx, SSL_VERIFY_PEER, nullptr);
-    } else {
-        SSL_CTX_set_verify(m_ctx, SSL_VERIFY_NONE, nullptr);
+            Logger::warn("[Wappsto] Could not load extra CA: %s", m_cfg.ca_cert.c_str());
     }
+    SSL_CTX_set_verify(m_ctx, SSL_VERIFY_PEER, nullptr);
 
     // Load client certificate (mTLS)
     if (!m_cfg.client_cert.empty()) {
