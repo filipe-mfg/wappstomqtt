@@ -81,6 +81,11 @@ private:
     void handleRpcRequest(const std::string& topic, const std::string& payload);
     void handleAttrRequest(const std::string& topic, const std::string& payload);
 
+    // Mirror gateway's running config (received on dev_attr_topic) back into
+    // the cache and into Wappsto report states. Breaks the reconnect loop:
+    // on subsequent requests we serve the gateway's own running config.
+    void handleAttrBroadcast(const std::string& payload);
+
     // Build response payload for a given set of keys. If keys is empty,
     // returns every non-shared entry (the gateway's initial load). If
     // `sharedOnly` is true, returns only entries with shared=true.

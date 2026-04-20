@@ -112,9 +112,10 @@ bool TbGatewayServer::onTbMessage(const TbMessage& msg) {
         handleAttrRequest(msg.topic, msg.payload);
         return true;
     }
-    // Gateway-itself attribute broadcasts and telemetry are informational
     if (msg.topic == tb.dev_attr_topic) {
-        Logger::debug("[TbSrv] Gateway attr broadcast: %s", msg.payload.c_str());
+        // Gateway reporting its running config — mirror into cache + Wappsto
+        // report states so subsequent attribute requests return the real values.
+        handleAttrBroadcast(msg.payload);
         return true;
     }
     if (msg.topic == tb.dev_telemetry_topic) {
@@ -279,6 +280,32 @@ void TbGatewayServer::publishSharedUpdate(const std::string& tb_key,
     payload[tb_key] = cj.is_discarded() ? json(jsonData) : cj;
     m_tb.publish(m_cfg.thingsboard.dev_attr_topic, payload.dump());
     Logger::debug("[TbSrv] Pushed shared update for %s", tb_key.c_str());
+}
+
+// -----------------------------------------------------------
+// Mirror gateway's running config into cache + Wappsto report states
+// -----------------------------------------------------------
+
+void TbGatewayServer::handleAttrBroadcast(const std::string& payload) {
+    auto j = json::parse(payload, nullptr, false);
+    if (j.is_discarded() || !j.is_object()) return;
+
+    std::lock_guard<std::mutex> lk(m_mutex);
+    for (auto& [key, val] : j.items()) {
+        if (key == "ts") continue;   // ThingsBoard timestamp field, not a config key
+
+        auto it = m_byTbKey.find(key);
+        if (it == m_byTbKey.end()) continue;
+
+        std::string valStr = val.is_string() ? val.get<std::string>() : val.dump();
+        it->second.cached_json = valStr;
+
+        Logger::info("[TbSrv] Cache updated from gateway broadcast: %s", key.c_str());
+
+        // Mirror into Wappsto report state so the UI shows what's really running
+        if (!it->second.report_state_uuid.empty())
+            m_wappsto.reportValue(it->second.report_state_uuid, valStr);
+    }
 }
 
 // -----------------------------------------------------------
