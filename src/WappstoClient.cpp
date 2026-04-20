@@ -261,15 +261,17 @@ std::string WappstoClient::sendRpc(const std::string& method,
     std::string id = genUUID();
     if (timeoutSec < 0) timeoutSec = m_cfg.rpc_timeout_sec;
 
-    // Build JSON-RPC request
+    // Build JSON-RPC request. GETs must not include a "data" field — the
+    // collector interprets GET-with-data as FETCH and rejects it.
+    json params = { {"url", url} };
+    if (method != "GET") {
+        params["data"] = json::parse(dataJson, nullptr, false);
+    }
     json req = {
         {"jsonrpc", "2.0"},
         {"id",      id},
         {"method",  method},
-        {"params",  {
-            {"url",  url},
-            {"data", json::parse(dataJson, nullptr, false)}
-        }}
+        {"params",  params}
     };
 
     // Register pending waiter
