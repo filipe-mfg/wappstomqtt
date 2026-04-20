@@ -67,7 +67,8 @@ static WappstoConfig parseWappsto(const json& j) {
     c.ca_cert      = jget<std::string>(j, "ca_cert",      c.ca_cert);
     c.client_cert  = jget<std::string>(j, "client_cert",  c.client_cert);
     c.client_key   = jget<std::string>(j, "client_key",   c.client_key);
-    c.network_uuid = jget<std::string>(j, "network_uuid", c.network_uuid);
+    c.network_uuid  = jget<std::string>(j, "network_uuid",  c.network_uuid);
+    c.network_name  = jget<std::string>(j, "network_name",  c.network_name);
     c.rpc_timeout_sec   = jget<int>(j, "rpc_timeout_sec",   c.rpc_timeout_sec);
     c.ping_interval_sec = jget<int>(j, "ping_interval_sec", c.ping_interval_sec);
     return c;

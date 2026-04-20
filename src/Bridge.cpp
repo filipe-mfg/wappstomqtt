@@ -50,7 +50,7 @@ bool Bridge::start() {
 
     // Start Wappsto first (so devices are ready before TB messages arrive)
     Logger::info("[Bridge] Starting Wappsto client…");
-    if (!m_wappsto->start("ThingsBoard-Wappsto Bridge")) {
+    if (!m_wappsto->start(m_cfg.wappsto.network_name)) {
         Logger::error("[Bridge] Failed to start Wappsto client");
         return false;
     }

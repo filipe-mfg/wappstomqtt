@@ -492,7 +492,10 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
     json schema;
     if (v.type == "number") {
         schema = {{"min", v.min}, {"max", v.max}, {"step", v.step}, {"unit", v.unit}};
+    } else if (v.type == "blob") {
+        schema = {{"max", 65536}, {"encoding", "utf-8"}};
     } else {
+        // "string" — Wappsto limits to 64 chars in the UI; use blob for larger payloads
         schema = {{"max", 64}, {"encoding", "utf-8"}};
     }
 

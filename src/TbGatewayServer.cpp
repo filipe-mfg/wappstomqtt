@@ -40,9 +40,8 @@ bool TbGatewayServer::start() {
     for (const auto& e : m_cfg.gateway_config.entries) {
         WappstoValue wv;
         wv.name       = e.wappsto_value_name;
-        wv.type       = "string";    // JSON blob stored as string
+        wv.type       = "blob";      // JSON config — can exceed 64-byte string limit
         wv.permission = "rw";
-        wv.min = 0; wv.max = 65536; wv.step = 1;
 
         std::string valueUuid = m_wappsto.ensureValue(deviceUuid, wv);
         if (valueUuid.empty()) {

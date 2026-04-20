@@ -82,7 +82,8 @@ struct WappstoConfig {
     std::string client_key   = "certs/client.key";
 
     // UUID of the Wappsto network (read from cert CN if "auto")
-    std::string network_uuid = "auto";
+    std::string network_uuid  = "auto";
+    std::string network_name  = "Stargate Bridge";
 
     int rpc_timeout_sec  = 5;
     int ping_interval_sec = 30;
