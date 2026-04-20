@@ -75,7 +75,7 @@ struct ThingsBoardConfig {
 // Wappsto connection configuration
 // -----------------------------------------------------------
 struct WappstoConfig {
-    std::string host         = "wappsto.com";
+    std::string host         = "collector.wappsto.com";
     int         port         = 443;
     std::string ca_cert      = "certs/ca.crt";
     std::string client_cert  = "certs/client.crt";

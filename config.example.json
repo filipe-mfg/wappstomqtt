@@ -47,7 +47,8 @@
   },
 
   "wappsto": {
-    "host": "wappsto.com",
+    "_comment_host": "collector.wappsto.com is the JSON-RPC IoT endpoint. wappsto.com is just the web UI (HTTPS) and will return HTTP 400 for our protocol.",
+    "host": "collector.wappsto.com",
     "port": 443,
     "_comment_certs": "Download certificates from IoT Certificate Manager on wappsto.com",
     "ca_cert":     "certs/ca.crt",
