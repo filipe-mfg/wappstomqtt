@@ -75,6 +75,15 @@ bool TbGatewayServer::start() {
         std::string ctrlData = m_wappsto.getStateData(entry.control_state_uuid);
         std::string rptData  = m_wappsto.getStateData(entry.report_state_uuid);
 
+        Logger::debug("[TbSrv] %s: ctrl_uuid=%s ctrl='%s'",
+                      e.tb_key.c_str(),
+                      entry.control_state_uuid.c_str(),
+                      ctrlData.substr(0, 80).c_str());
+        Logger::debug("[TbSrv] %s: rpt_uuid=%s  rpt='%s'",
+                      e.tb_key.c_str(),
+                      entry.report_state_uuid.c_str(),
+                      rptData.substr(0, 80).c_str());
+
         std::string cur;
         if (!ctrlData.empty() && ctrlData != "NA") {
             cur = ctrlData;
@@ -87,8 +96,6 @@ bool TbGatewayServer::start() {
             cur = e.default_json;
             Logger::info("[TbSrv] %s: seeding control state with default (first run)",
                          e.tb_key.c_str());
-            // Write default only to control state as a starting point for the user.
-            // Report state is left NA — will be set by handleAttrBroadcast.
             if (!entry.control_state_uuid.empty())
                 m_wappsto.reportValue(entry.control_state_uuid, cur);
         }

@@ -574,17 +574,22 @@ bool WappstoClient::reportValue(const std::string& stateUuid,
 // -----------------------------------------------------------
 
 std::string WappstoClient::getStateData(const std::string& stateUuid) {
-    std::string res = sendRpc("GET", "/state/" + stateUuid, "{}");
+    if (stateUuid.empty()) return "";
+    std::string res = sendRpc("GET", "/state/" + stateUuid);
     if (res.empty()) return "";
 
     auto j = json::parse(res, nullptr, false);
     if (j.is_discarded()) return "";
 
-    // Response is the state object wrapped in { "value": <state> } (per
-    // Wappsto protocol). Extract the "data" field.
-    json state = j.contains("value") ? j["value"] : j;
-    if (!state.contains("data")) return "";
-    return state["data"].get<std::string>();
+    // Wappsto wraps the state object in { "value": <state> }
+    const json& state = j.contains("value") ? j["value"] : j;
+    if (!state.is_object() || !state.contains("data")) return "";
+
+    const json& d = state["data"];
+    // data may be a string (stored as-is) or any JSON value (blob type)
+    if (d.is_string()) return d.get<std::string>();
+    if (d.is_null())   return "";
+    return d.dump();  // object/array/number — serialise back to string
 }
 
 // -----------------------------------------------------------
