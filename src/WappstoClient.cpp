@@ -193,11 +193,11 @@ bool WappstoClient::sendLine(const std::string& line) {
     std::lock_guard<std::mutex> lock(m_sendMutex);
     if (!m_ssl || !m_connected) return false;
 
-    std::string msg = line + "\r\n";
+    // Wappsto's JSON-RPC transport is raw JSON back-to-back — no delimiter.
     int total = 0;
-    int len   = static_cast<int>(msg.size());
+    int len   = static_cast<int>(line.size());
     while (total < len) {
-        int written = SSL_write(m_ssl, msg.c_str() + total, len - total);
+        int written = SSL_write(m_ssl, line.c_str() + total, len - total);
         if (written <= 0) {
             Logger::error("[Wappsto] SSL_write failed");
             return false;
@@ -208,16 +208,46 @@ bool WappstoClient::sendLine(const std::string& line) {
     return true;
 }
 
+// Read one full JSON object by tracking brace depth, respecting string
+// literals and escape sequences. Leading whitespace between messages is
+// ignored. Returns an empty string on disconnect.
 std::string WappstoClient::recvLine() {
-    std::string line;
+    std::string msg;
+    int  depth     = 0;
+    bool inString  = false;
+    bool escape    = false;
+    bool started   = false;
     char c;
+
     while (m_running && m_ssl) {
         int rc = SSL_read(m_ssl, &c, 1);
         if (rc <= 0) return "";
-        if (c == '\n') break;
-        if (c != '\r') line += c;
+
+        if (!started) {
+            if (c == '{' || c == '[') {
+                started = true;
+                depth   = 1;
+                msg    += c;
+            }
+            // Anything else outside a message is ignored (whitespace, etc.)
+            continue;
+        }
+
+        msg += c;
+
+        if (escape)          { escape = false; continue; }
+        if (inString) {
+            if (c == '\\')     escape = true;
+            else if (c == '"') inString = false;
+            continue;
+        }
+        if (c == '"') { inString = true; continue; }
+        if (c == '{' || c == '[') ++depth;
+        else if (c == '}' || c == ']') {
+            if (--depth == 0) return msg;
+        }
     }
-    return line;
+    return "";
 }
 
 // -----------------------------------------------------------
