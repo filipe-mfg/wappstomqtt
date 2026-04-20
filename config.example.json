@@ -4,21 +4,27 @@
   "log_level": "info",
 
   "thingsboard": {
-    "host": "thingsboard.example.com",
-    "port": 1883,
-    "username": "GATEWAY_ACCESS_TOKEN",
+    "_comment": "This is the MQTT broker where the ThingsBoard gateway publishes. Typically this is a Mosquitto instance that the bridge and the gateway both connect to — there is no real ThingsBoard running.",
+    "host": "localhost",
+    "port": 1884,
+    "username": "",
     "password": "",
     "client_id": "tb-wappsto-bridge",
     "keepalive_sec": 60,
 
-    "_comment_topics": "Standard ThingsBoard gateway topics. Override if you use custom topics.",
-    "subscribe_topics": ["v1/gateway/#"],
-    "telemetry_topic":   "v1/gateway/telemetry",
-    "attributes_topic":  "v1/gateway/attributes",
-    "connect_topic":     "v1/gateway/connect",
-    "disconnect_topic":  "v1/gateway/disconnect",
-    "rpc_topic":         "v1/gateway/rpc",
-    "rpc_resp_topic":    "v1/gateway/rpc",
+    "_comment_topics": "Subscribing to the full gateway + gateway-device protocol so the bridge can emulate the ThingsBoard server. Leave defaults unless you know what you're doing.",
+    "subscribe_topics": [
+      "v1/devices/me/rpc/request/+",
+      "v1/devices/me/attributes/request/+",
+      "v1/devices/me/attributes",
+      "v1/devices/me/telemetry",
+      "v1/gateway/telemetry",
+      "v1/gateway/attributes",
+      "v1/gateway/attributes/request/+",
+      "v1/gateway/connect",
+      "v1/gateway/disconnect",
+      "v1/gateway/rpc"
+    ],
 
     "tls": {
       "enabled": false,
@@ -51,6 +57,72 @@
     "network_uuid": "auto",
     "rpc_timeout_sec": 5,
     "ping_interval_sec": 30
+  },
+
+  "gateway_config": {
+    "_comment": "Serves configuration to the ThingsBoard IoT Gateway from Wappsto. Each entry becomes a rw value in the 'Gateway Config' device. Edit the control state in the Wappsto UI — the gateway reloads automatically.",
+    "enabled": true,
+    "wappsto_device_name": "Gateway Config",
+
+    "session_limits": {
+      "maxPayloadSize": 65536,
+      "maxInflightMessages": 100
+    },
+
+    "entries": [
+      {
+        "tb_key": "general_configuration",
+        "wappsto_value_name": "general_configuration",
+        "shared": false,
+        "default_json": {
+          "host": "localhost",
+          "port": 1884,
+          "remoteConfiguration": true,
+          "statistics": { "enable": true, "statsSendPeriodInSeconds": 60 },
+          "security": { "type": "accessToken", "accessToken": "REPLACE_ME" },
+          "qos": 1,
+          "reportStrategy": { "type": "ON_RECEIVED" }
+        }
+      },
+      {
+        "tb_key": "active_connectors",
+        "wappsto_value_name": "active_connectors",
+        "shared": false,
+        "default_json": ["OPCUA"]
+      },
+      {
+        "tb_key": "storage_configuration",
+        "wappsto_value_name": "storage_configuration",
+        "shared": false,
+        "default_json": {
+          "type": "memory",
+          "read_records_count": 100,
+          "max_records_count": 100000
+        }
+      },
+      {
+        "tb_key": "OPCUA",
+        "wappsto_value_name": "OPCUA",
+        "shared": true,
+        "default_json": {
+          "name": "OPCUA",
+          "type": "opcua",
+          "configurationJson": {
+            "server": {
+              "url": "opc.tcp://10.8.0.2:53530/OPCUA/SimulationServer",
+              "timeoutInMillis": 5000,
+              "scanPeriodInMillis": 5000,
+              "pollPeriodInMillis": 5000,
+              "enableSubscriptions": true,
+              "subCheckPeriodInMillis": 100,
+              "security": "Basic128Rsa15",
+              "identity": { "type": "anonymous" }
+            },
+            "mapping": []
+          }
+        }
+      }
+    ]
   },
 
   "mapping": {

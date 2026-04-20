@@ -14,19 +14,10 @@
 // call the ThingsBoard HTTP REST API.
 // -----------------------------------------------------------
 
-#include "Config.hpp"
+#include "Config.hpp"   // declares struct ThingsBoardApiConfig
 #include <string>
 #include <map>
 #include <mutex>
-
-struct ThingsBoardApiConfig {
-    std::string host;       // same as MQTT host by default
-    int         port = 8080;
-    bool        tls  = false;
-    std::string username;
-    std::string password;
-    int         timeout_sec = 10;
-};
 
 class ThingsBoardApi {
 public:

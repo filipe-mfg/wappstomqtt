@@ -93,6 +93,19 @@ public:
                      const std::string& data,
                      const std::string& timestamp = "");
 
+    // Fetch the current data payload of a state (GET /state/{uuid})
+    // Returns empty string on error
+    std::string getStateData(const std::string& stateUuid);
+
+    // Deterministic UUID generation (v5 SHA-1 based).
+    //   namespace: any UUID (we use the network UUID as root)
+    //   name:      any string, e.g. "Gateway Config", "OPCUA", "Report"
+    // Same inputs always produce the same output UUID, so restarts
+    // reuse the same Wappsto objects.
+    static std::string uuid5(const std::string& namespaceUuid,
+                             const std::string& name);
+
+    const std::string& networkUuid() const { return m_net.uuid; }
     const WappstoNetwork& network() const { return m_net; }
 
 private:

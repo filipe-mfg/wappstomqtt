@@ -22,6 +22,9 @@ Bridge::Bridge(const Config& cfg)
     if (cfg.thingsboard.api.enabled) {
         m_tbApi = std::make_unique<ThingsBoardApi>(cfg.thingsboard.api);
     }
+    if (cfg.gateway_config.enabled) {
+        m_tbServer = std::make_unique<TbGatewayServer>(cfg, *m_tb, *m_wappsto);
+    }
 }
 
 // -----------------------------------------------------------
@@ -105,6 +108,15 @@ bool Bridge::start() {
         m_tbApi->authenticate();
     }
 
+    // Provision gateway-config values in Wappsto and prime their cache
+    if (m_tbServer) {
+        Logger::info("[Bridge] Starting TB gateway server…");
+        if (!m_tbServer->start()) {
+            Logger::error("[Bridge] TB gateway server failed to start");
+            return false;
+        }
+    }
+
     Logger::info("[Bridge] Starting ThingsBoard client…");
     if (!m_tb->start()) {
         Logger::error("[Bridge] Failed to start ThingsBoard client");
@@ -137,6 +149,10 @@ void Bridge::stop() {
 // -----------------------------------------------------------
 
 void Bridge::onTbMessage(const TbMessage& msg) {
+    // Gateway-device (v1/devices/me/...) topics are handled by the
+    // TB-server emulator. If it consumed the message we're done.
+    if (m_tbServer && m_tbServer->onTbMessage(msg)) return;
+
     const auto& tc = m_cfg.thingsboard;
 
     if (msg.topic == tc.telemetry_topic)
@@ -231,6 +247,11 @@ void Bridge::handleRpcFromServer(const std::string& payload) {
 // Wappsto Control → ThingsBoard RPC
 // -----------------------------------------------------------
 void Bridge::onWappstoControl(const WappstoControl& ctrl) {
+    // Config values take priority — they push a shared attribute to
+    // the gateway and do NOT map to an RPC.
+    if (m_tbServer && m_tbServer->onWappstoControl(ctrl.state_uuid, ctrl.data))
+        return;
+
     std::lock_guard<std::mutex> lk(m_devicesMutex);
 
     // Find which device/value owns this control state

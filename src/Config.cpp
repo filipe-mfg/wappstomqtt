@@ -118,6 +118,38 @@ static MappingConfig parseMapping(const json& j) {
     return m;
 }
 
+static GatewayConfigEntry parseGatewayEntry(const json& j) {
+    GatewayConfigEntry e;
+    e.tb_key             = jget<std::string>(j, "tb_key",             "");
+    e.wappsto_value_name = jget<std::string>(j, "wappsto_value_name", e.tb_key);
+    e.shared             = jget<bool>(j,        "shared",             false);
+    // default_json can be either a JSON object/array or a JSON string
+    if (j.contains("default_json")) {
+        if (j["default_json"].is_string()) {
+            e.default_json = j["default_json"].get<std::string>();
+        } else {
+            e.default_json = j["default_json"].dump();
+        }
+    }
+    return e;
+}
+
+static GatewayConfigMapping parseGatewayConfig(const json& j) {
+    GatewayConfigMapping g;
+    g.enabled             = jget<bool>(j,        "enabled",             false);
+    g.wappsto_device_name = jget<std::string>(j, "wappsto_device_name", g.wappsto_device_name);
+
+    if (j.contains("session_limits")) {
+        auto& s = j["session_limits"];
+        g.session_limits.maxPayloadSize      = jget<int>(s, "maxPayloadSize",      65536);
+        g.session_limits.maxInflightMessages = jget<int>(s, "maxInflightMessages", 100);
+    }
+    if (j.contains("entries") && j["entries"].is_array()) {
+        for (auto& e : j["entries"]) g.entries.push_back(parseGatewayEntry(e));
+    }
+    return g;
+}
+
 Config Config::load(const std::string& path) {
     std::ifstream f(path);
     if (!f.is_open()) throw std::runtime_error("Cannot open config file: " + path);
@@ -130,15 +162,14 @@ Config Config::load(const std::string& path) {
     }
 
     Config c;
-    if (j.contains("thingsboard")) c.thingsboard = parseThingsBoard(j["thingsboard"]);
-    if (j.contains("wappsto"))     c.wappsto     = parseWappsto(j["wappsto"]);
-    if (j.contains("mapping"))     c.mapping     = parseMapping(j["mapping"]);
+    if (j.contains("thingsboard"))    c.thingsboard    = parseThingsBoard(j["thingsboard"]);
+    if (j.contains("wappsto"))        c.wappsto        = parseWappsto(j["wappsto"]);
+    if (j.contains("mapping"))        c.mapping        = parseMapping(j["mapping"]);
+    if (j.contains("gateway_config")) c.gateway_config = parseGatewayConfig(j["gateway_config"]);
     c.log_level = jget<std::string>(j, "log_level", "info");
 
     if (c.thingsboard.host.empty())
         throw std::runtime_error("thingsboard.host is required");
-    if (c.thingsboard.username.empty())
-        throw std::runtime_error("thingsboard.username (gateway access token) is required");
 
     return c;
 }

@@ -6,6 +6,7 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <openssl/x509.h>
+#include <openssl/evp.h>
 
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -401,7 +402,11 @@ std::string WappstoClient::ensureDevice(const std::string& name,
 
     WappstoDevice dev;
     dev.name = name;
-    dev.uuid = preferredUuid.empty() ? genUUID() : preferredUuid;
+    // Deterministic UUID derived from network UUID + device name so it
+    // survives restarts without re-creating duplicate objects.
+    dev.uuid = !preferredUuid.empty()
+               ? preferredUuid
+               : uuid5(m_net.uuid, name);
 
     json devData = {
         {"meta",     {{"id",   dev.uuid},
@@ -442,7 +447,7 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
     if (it != dev->values.end()) return it->second.uuid;
 
     WappstoValue v = val;
-    if (v.uuid.empty()) v.uuid = genUUID();
+    if (v.uuid.empty()) v.uuid = uuid5(deviceUuid, v.name);
 
     // Build number/string schema
     json schema;
@@ -474,7 +479,7 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
 
     // Create Report state (if readable)
     if (v.permission == "r" || v.permission == "rw") {
-        v.report_state_uuid = genUUID();
+        v.report_state_uuid = uuid5(v.uuid, "Report");
         json stData = {
             {"meta",      {{"id",   v.report_state_uuid},
                            {"type", "state"},
@@ -489,7 +494,7 @@ std::string WappstoClient::ensureValue(const std::string& deviceUuid,
 
     // Create Control state (if writable)
     if (v.permission == "w" || v.permission == "rw") {
-        v.control_state_uuid = genUUID();
+        v.control_state_uuid = uuid5(v.uuid, "Control");
         json stData = {
             {"meta",      {{"id",   v.control_state_uuid},
                            {"type", "state"},
@@ -519,6 +524,24 @@ bool WappstoClient::reportValue(const std::string& stateUuid,
 }
 
 // -----------------------------------------------------------
+// Fetch current state data (GET /state/{uuid})
+// -----------------------------------------------------------
+
+std::string WappstoClient::getStateData(const std::string& stateUuid) {
+    std::string res = sendRpc("GET", "/state/" + stateUuid, "{}");
+    if (res.empty()) return "";
+
+    auto j = json::parse(res, nullptr, false);
+    if (j.is_discarded()) return "";
+
+    // Response is the state object wrapped in { "value": <state> } (per
+    // Wappsto protocol). Extract the "data" field.
+    json state = j.contains("value") ? j["value"] : j;
+    if (!state.contains("data")) return "";
+    return state["data"].get<std::string>();
+}
+
+// -----------------------------------------------------------
 // Utilities
 // -----------------------------------------------------------
 
@@ -540,6 +563,47 @@ std::string WappstoClient::genUUID() {
         (c >> 16) & 0xFFFF,
         c & 0xFFFF,
         d);
+    return buf;
+}
+
+// -----------------------------------------------------------
+// UUID v5 (SHA-1 based, deterministic from namespace + name)
+// -----------------------------------------------------------
+
+std::string WappstoClient::uuid5(const std::string& namespaceUuid,
+                                 const std::string& name) {
+    // Parse namespace UUID into 16 raw bytes
+    unsigned char nsBytes[16] = {};
+    const char* s = namespaceUuid.c_str();
+    int bi = 0;
+    for (int i = 0; s[i] && bi < 16; ++i) {
+        if (s[i] == '-') continue;
+        char hex[3] = { s[i], s[i+1], 0 };
+        nsBytes[bi++] = static_cast<unsigned char>(std::strtoul(hex, nullptr, 16));
+        ++i;
+    }
+
+    // SHA-1(namespace || name) via EVP (non-deprecated API)
+    unsigned char digest[20];
+    unsigned int  digestLen = sizeof(digest);
+    EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+    EVP_DigestInit_ex(ctx, EVP_sha1(), nullptr);
+    EVP_DigestUpdate(ctx, nsBytes, 16);
+    EVP_DigestUpdate(ctx, name.data(), name.size());
+    EVP_DigestFinal_ex(ctx, digest, &digestLen);
+    EVP_MD_CTX_free(ctx);
+
+    // Take first 16 bytes; set version=5 and RFC4122 variant
+    digest[6] = (digest[6] & 0x0F) | 0x50;
+    digest[8] = (digest[8] & 0x3F) | 0x80;
+
+    char buf[37];
+    std::snprintf(buf, sizeof(buf),
+        "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+        digest[0],  digest[1],  digest[2],  digest[3],
+        digest[4],  digest[5],  digest[6],  digest[7],
+        digest[8],  digest[9],  digest[10], digest[11],
+        digest[12], digest[13], digest[14], digest[15]);
     return buf;
 }
 

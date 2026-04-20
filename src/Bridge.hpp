@@ -4,6 +4,7 @@
 #include "ThingsBoardClient.hpp"
 #include "WappstoClient.hpp"
 #include "ThingsBoardApi.hpp"
+#include "TbGatewayServer.hpp"
 #include <string>
 #include <map>
 #include <mutex>
@@ -61,7 +62,8 @@ private:
     Config m_cfg;
     std::unique_ptr<ThingsBoardClient> m_tb;
     std::unique_ptr<WappstoClient>     m_wappsto;
-    std::unique_ptr<ThingsBoardApi>    m_tbApi;   // for RPC triggering (Wappsto→TB)
+    std::unique_ptr<ThingsBoardApi>    m_tbApi;       // Wappsto→TB RPC via REST
+    std::unique_ptr<TbGatewayServer>   m_tbServer;    // emulates TB server for gateway
 
     std::mutex m_devicesMutex;
     // keyed by ThingsBoard device name

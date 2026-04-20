@@ -35,14 +35,37 @@ struct ThingsBoardConfig {
     std::string client_id       = "tb-wappsto-bridge";
     int         keepalive_sec   = 60;
 
-    // Topics – default to standard ThingsBoard gateway topics
-    std::vector<std::string> subscribe_topics = {"v1/gateway/#"};
+    // Topics the bridge subscribes to on the broker. Defaults cover
+    // both sides of the gateway-device protocol, so the bridge can
+    // emulate the ThingsBoard server.
+    std::vector<std::string> subscribe_topics = {
+        "v1/devices/me/rpc/request/+",
+        "v1/devices/me/attributes/request/+",
+        "v1/devices/me/attributes",
+        "v1/devices/me/telemetry",
+        "v1/gateway/telemetry",
+        "v1/gateway/attributes",
+        "v1/gateway/attributes/request/+",
+        "v1/gateway/connect",
+        "v1/gateway/disconnect",
+        "v1/gateway/rpc"
+    };
+
+    // Gateway-device (downstream) topics
     std::string telemetry_topic   = "v1/gateway/telemetry";
     std::string attributes_topic  = "v1/gateway/attributes";
     std::string connect_topic     = "v1/gateway/connect";
     std::string disconnect_topic  = "v1/gateway/disconnect";
-    std::string rpc_topic         = "v1/gateway/rpc";         // incoming RPC from TB
-    std::string rpc_resp_topic    = "v1/gateway/rpc";         // RPC response (same topic)
+    std::string rpc_topic         = "v1/gateway/rpc";
+    std::string rpc_resp_topic    = "v1/gateway/rpc";
+
+    // Gateway-itself (device) topics — used to emulate the TB server
+    std::string dev_rpc_request_prefix     = "v1/devices/me/rpc/request/";
+    std::string dev_rpc_response_prefix    = "v1/devices/me/rpc/response/";
+    std::string dev_attr_request_prefix    = "v1/devices/me/attributes/request/";
+    std::string dev_attr_response_prefix   = "v1/devices/me/attributes/response/";
+    std::string dev_attr_topic             = "v1/devices/me/attributes";
+    std::string dev_telemetry_topic        = "v1/devices/me/telemetry";
 
     TbTlsConfig        tls;
     ThingsBoardApiConfig api;
@@ -63,6 +86,39 @@ struct WappstoConfig {
 
     int rpc_timeout_sec  = 5;
     int ping_interval_sec = 30;
+};
+
+// -----------------------------------------------------------
+// Gateway configuration serving (ThingsBoard server-side protocol)
+// -----------------------------------------------------------
+//
+// The bridge acts as a ThingsBoard server from the gateway's point
+// of view. It serves configuration stored as values in Wappsto, so
+// the operator can edit OPC-UA / Modbus / ... configs through the
+// Wappsto UI (control state) and the gateway reloads automatically.
+// -----------------------------------------------------------
+
+struct GatewayConfigEntry {
+    std::string tb_key;              // e.g. "general_configuration", "OPCUA"
+    std::string wappsto_value_name;  // value name in Wappsto
+    bool        shared = false;      // true = responds to request with "sharedKeys"
+    std::string default_json = "{}"; // used to initialise the value if it's empty
+};
+
+struct SessionLimits {
+    int maxPayloadSize            = 65536;
+    int maxInflightMessages       = 100;
+    // Rate limits left null (the gateway interprets null as "unlimited")
+};
+
+struct GatewayConfigMapping {
+    bool   enabled = false;
+    std::string wappsto_device_name = "Gateway Config";
+
+    SessionLimits session_limits;
+
+    // Attribute key → Wappsto value mapping
+    std::vector<GatewayConfigEntry> entries;
 };
 
 // -----------------------------------------------------------
@@ -117,10 +173,11 @@ struct MappingConfig {
 // Top-level configuration
 // -----------------------------------------------------------
 struct Config {
-    ThingsBoardConfig thingsboard;
-    WappstoConfig     wappsto;
-    MappingConfig     mapping;
-    std::string       log_level = "info";
+    ThingsBoardConfig    thingsboard;
+    WappstoConfig        wappsto;
+    MappingConfig        mapping;
+    GatewayConfigMapping gateway_config;
+    std::string          log_level = "info";
 
     // Load from JSON file; throws std::runtime_error on failure
     static Config load(const std::string& path);
