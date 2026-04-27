@@ -59,10 +59,16 @@ bool Bridge::start() {
     if (m_cfg.mapping.mode == MappingMode::STATIC) {
         std::lock_guard<std::mutex> lk(m_devicesMutex);
         for (auto& [name, rdev] : m_devices) {
-            std::string devUuid = m_wappsto->ensureDevice(
-                m_cfg.mapping.devices[0].wappsto_device_name.empty()
-                    ? name : name,
-                rdev.wappsto_device_uuid);
+            // Look up the matching DeviceMapping so we use the configured
+            // wappsto_device_name (falls back to the TB device name).
+            const DeviceMapping* dm = nullptr;
+            for (const auto& d : m_cfg.mapping.devices) {
+                if (d.tb_device == name) { dm = &d; break; }
+            }
+            std::string wappstoName =
+                (dm && !dm->wappsto_device_name.empty()) ? dm->wappsto_device_name : name;
+            std::string devUuid = m_wappsto->ensureDevice(wappstoName,
+                                                          rdev.wappsto_device_uuid);
             rdev.wappsto_device_uuid = devUuid;
 
             for (auto& [key, rv] : rdev.valuesByTbKey) {

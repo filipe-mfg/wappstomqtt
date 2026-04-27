@@ -10,6 +10,7 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <openssl/x509v3.h>
 
 #include <sstream>
 #include <stdexcept>
@@ -197,14 +198,25 @@ std::string ThingsBoardApi::sendReceive(const std::string& request) {
     std::string body;
 
     if (m_cfg.tls) {
-        // TLS path
+        // TLS path — verify the server certificate against the system's
+        // trusted CA store. Without this we'd be vulnerable to MITM on the
+        // path between the bridge and ThingsBoard, leaking the JWT and any
+        // RPC payloads.
         SSL_CTX* ctx = SSL_CTX_new(TLS_client_method());
-        SSL_CTX_set_verify(ctx, SSL_VERIFY_NONE, nullptr);
+        SSL_CTX_set_default_verify_paths(ctx);
+        SSL_CTX_set_verify(ctx, SSL_VERIFY_PEER, nullptr);
         SSL* ssl = SSL_new(ctx);
         SSL_set_fd(ssl, sock);
         SSL_set_tlsext_host_name(ssl, m_cfg.host.c_str());
+        // Enable hostname verification at the OpenSSL layer
+        X509_VERIFY_PARAM* vp = SSL_get0_param(ssl);
+        X509_VERIFY_PARAM_set_hostflags(vp, X509_CHECK_FLAG_NO_PARTIAL_WILDCARDS);
+        X509_VERIFY_PARAM_set1_host(vp, m_cfg.host.c_str(), 0);
         if (SSL_connect(ssl) != 1) {
-            Logger::error("[TbApi] TLS handshake failed");
+            unsigned long err = ERR_get_error();
+            char errbuf[256];
+            ERR_error_string_n(err, errbuf, sizeof(errbuf));
+            Logger::error("[TbApi] TLS handshake failed: %s", errbuf);
             SSL_free(ssl); SSL_CTX_free(ctx); close(sock); return "";
         }
         SSL_write(ssl, request.c_str(), static_cast<int>(request.size()));
