@@ -245,13 +245,7 @@ void TbGatewayServer::handleAttrRequest(const std::string& topic,
                 client[k] = cj.is_discarded() ? json(e.cached_json) : cj;
             }
         }
-        // When only client keys are requested the payload is the client map
-        // at the root level. Otherwise it's nested under "client".
-        if (wantAllClient && sharedKeys.empty()) {
-            resp = client;
-        } else {
-            resp["client"] = client;
-        }
+        resp["client"] = client;
     }
 
     std::string respTopic = m_cfg.thingsboard.dev_attr_response_prefix + reqId;
@@ -315,6 +309,7 @@ void TbGatewayServer::handleAttrBroadcast(const std::string& payload) {
 
         auto it = m_byTbKey.find(key);
         if (it == m_byTbKey.end()) continue;
+        if (it->second.shared) continue;  // shared attrs are set via Wappsto, not gateway broadcasts
 
         std::string valStr = val.is_string() ? val.get<std::string>() : val.dump();
         it->second.cached_json = valStr;
