@@ -20,6 +20,7 @@
 #include <random>
 #include <ctime>
 #include <chrono>
+#include <algorithm>
 
 using json = nlohmann::json;
 
@@ -115,11 +116,30 @@ bool WappstoClient::start(const std::string& networkName) {
 }
 
 void WappstoClient::stop() {
-    m_running = false;
+    if (!m_running.exchange(false)) return;  // idempotent
     m_connected = false;
-    tlsDisconnect();
+
+    // Wake recvLoop / pingLoop without freeing SSL yet — shutdown(2) makes
+    // any in-flight SSL_read or SSL_write return immediately. We must NOT
+    // call SSL_free() before joining the threads (use-after-free).
+    if (m_sock >= 0) ::shutdown(m_sock, SHUT_RDWR);
+
+    // Wake any thread blocked in sendRpc waiting for a response
+    {
+        std::lock_guard<std::mutex> lk(m_rpcMutex);
+        for (auto& [id, p] : m_pending) {
+            p->ok     = false;
+            p->result = "shutdown";
+            p->done   = true;
+            p->cv.notify_all();
+        }
+    }
+
     if (m_recvThread.joinable()) m_recvThread.join();
     if (m_pingThread.joinable()) m_pingThread.join();
+
+    // Now it is safe to tear down the SSL state
+    tlsDisconnect();
 }
 
 // -----------------------------------------------------------
@@ -174,6 +194,11 @@ bool WappstoClient::tlsConnect() {
 }
 
 void WappstoClient::tlsDisconnect() {
+    // Take the send mutex so any in-flight SSL_write completes before we
+    // free the SSL pointer. Reads are issued only from recvLoop, which
+    // must already have exited (or be the caller, during reconnect).
+    std::lock_guard<std::mutex> lock(m_sendMutex);
+    m_connected = false;
     if (m_ssl) {
         SSL_shutdown(m_ssl);
         SSL_free(m_ssl);
@@ -323,12 +348,43 @@ void WappstoClient::sendReply(const std::string& id, bool ok,
 void WappstoClient::recvLoop() {
     while (m_running) {
         std::string line = recvLine();
-        if (line.empty()) {
-            if (m_running) Logger::warn("[Wappsto] Connection lost");
-            break;
+        if (!line.empty()) {
+            Logger::debug("[Wappsto] RECV: %s", line.c_str());
+            handleMessage(line);
+            continue;
         }
-        Logger::debug("[Wappsto] RECV: %s", line.c_str());
-        handleMessage(line);
+        if (!m_running) break;
+
+        // Connection lost — fail any in-flight RPCs so callers don't hang
+        // for the full timeout, then attempt to reconnect with backoff.
+        Logger::warn("[Wappsto] Connection lost — attempting reconnect");
+        {
+            std::lock_guard<std::mutex> lk(m_rpcMutex);
+            for (auto& [id, p] : m_pending) {
+                p->ok     = false;
+                p->result = "disconnected";
+                p->done   = true;
+                p->cv.notify_all();
+            }
+        }
+        tlsDisconnect();
+
+        int delay = 1;
+        while (m_running) {
+            for (int i = 0; i < delay && m_running; ++i)
+                std::this_thread::sleep_for(std::chrono::seconds(1));
+            if (!m_running) break;
+
+            // Don't call provisionNetwork() here — it does a sendRpc, which
+            // would block waiting for a response that only this same thread
+            // can process. Wappsto identifies us via mTLS, so the network
+            // already exists from the first start(); we just need TLS back.
+            if (tlsConnect()) {
+                Logger::info("[Wappsto] Reconnected");
+                break;
+            }
+            delay = std::min(delay * 2, 60);  // cap at 60s
+        }
     }
     m_connected = false;
 }
@@ -398,7 +454,8 @@ void WappstoClient::pingLoop() {
     while (m_running) {
         for (int i = 0; i < m_cfg.ping_interval_sec && m_running; ++i)
             std::this_thread::sleep_for(std::chrono::seconds(1));
-        if (!m_running || !m_connected) break;
+        if (!m_running) break;
+        if (!m_connected) continue;  // disconnected — let recvLoop reconnect
 
         Logger::debug("[Wappsto] Sending ping");
         sendRpc("GET", "/network/" + m_net.uuid, "{}", 5);
