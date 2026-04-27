@@ -61,12 +61,13 @@ bool Bridge::start() {
         for (auto& [name, rdev] : m_devices) {
             // Look up the matching DeviceMapping so we use the configured
             // wappsto_device_name (falls back to the TB device name).
-            const DeviceMapping* dm = nullptr;
+            const DeviceMapping* match = nullptr;
             for (const auto& d : m_cfg.mapping.devices) {
-                if (d.tb_device == name) { dm = &d; break; }
+                if (d.tb_device == name) { match = &d; break; }
             }
             std::string wappstoName =
-                (dm && !dm->wappsto_device_name.empty()) ? dm->wappsto_device_name : name;
+                (match && !match->wappsto_device_name.empty())
+                    ? match->wappsto_device_name : name;
             std::string devUuid = m_wappsto->ensureDevice(wappstoName,
                                                           rdev.wappsto_device_uuid);
             rdev.wappsto_device_uuid = devUuid;
