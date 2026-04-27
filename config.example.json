@@ -109,6 +109,10 @@
         "default_json": {
           "name": "OPCUA",
           "type": "opcua",
+          "mode": "advanced",
+          "configuration": "opcua.json",
+          "enableRemoteLogging": false,
+          "logLevel": "INFO",
           "configurationJson": {
             "server": {
               "url": "opc.tcp://10.8.0.2:53530/OPCUA/SimulationServer",
